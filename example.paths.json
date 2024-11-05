@@ -1,0 +1,12 @@
+ [
+     {
+         "Organisation": "root",
+         "User": "root",
+         "Path": "/"
+     },
+     {
+        "Organisation": "root",
+        "User": "root",
+        "Path": "/dummy-directory"
+    }
+ ]
