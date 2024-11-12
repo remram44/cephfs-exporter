@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ceph/go-ceph/cephfs"
 	rados "github.com/ceph/go-ceph/rados"
@@ -21,7 +20,6 @@ const (
 	defaultCephClusterLabel = "ceph"
 	defaultCephConfigPath   = "/etc/ceph/ceph.conf"
 	defaultCephUser         = "admin"
-	defaultUpdateInterval   = 5 // in seconds
 )
 
 type PathEntry struct {
@@ -98,15 +96,14 @@ func (dm *DynamicMetrics) UpdateMetrics(info *cephfs.MountInfo) {
 			gauge.With(entry.Tags()).Set(f)
 		}
 	}
-}	
+}
 
 func main() {
 	var (
-		metricsAddr    = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for ceph exporter's metrics endpoint")
-		metricsPath    = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for surfacing metrics to Prometheus")
-		cephConfig     = envflag.String("CEPH_CONFIG", defaultCephConfigPath, "Path to Ceph config file")
-		cephUser       = envflag.String("CEPH_USER", defaultCephUser, "Ceph user to connect to cluster")
-		updateInterval = envflag.Int("UPDATE_INTERVAL", defaultUpdateInterval, "Interval to scrape updated ceph metrics (in seconds)")
+		metricsAddr = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for ceph exporter's metrics endpoint")
+		metricsPath = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for surfacing metrics to Prometheus")
+		cephConfig  = envflag.String("CEPH_CONFIG", defaultCephConfigPath, "Path to Ceph config file")
+		cephUser    = envflag.String("CEPH_USER", defaultCephUser, "Ceph user to connect to cluster")
 	)
 
 	envflag.Parse()
@@ -143,14 +140,10 @@ func main() {
 
 	dm := NewDynamicMetrics()
 
-	http.Handle(*metricsPath, promhttp.Handler())
-
-	go func() {
-		for {
-			dm.UpdateMetrics(info)
-			time.Sleep(time.Duration(*updateInterval) * time.Second)
-		}
-	}()
+	http.HandleFunc(*metricsPath, func(w http.ResponseWriter, r *http.Request) {
+		dm.UpdateMetrics(info)
+		promhttp.Handler().ServeHTTP(w, r)
+	})
 
 	fmt.Printf("Starting server on %s\n", *metricsAddr)
 	log.Fatal(http.ListenAndServe(*metricsAddr, nil))
