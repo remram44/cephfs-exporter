@@ -67,30 +67,24 @@ func LoadDirsConfig(path string) []PathEntry {
 }
 
 func (dm *DynamicMetrics) UpdateMetrics(info *cephfs.MountInfo) {
+	attrs := []string{"ceph.dir.rbytes", "ceph.dir.rentries", "ceph.dir.rfiles"}
 	entries := LoadDirsConfig("paths.json")
 	for _, entry := range entries {
 		fmt.Printf("Organisation: %s, User: %s, Path: %s\n", entry.Organisation, entry.User, entry.Path)
 	}
 	for _, entry := range entries {
-		attrs, err := info.ListXattr(entry.Path)
-		if err != nil {
-			log.Printf("unable to get list of xattr for %q: %v\n", entry.Path, err)
-			continue
-		}
-		fields := make(map[string]interface{}, len(attrs))
-
 		for _, attr := range attrs {
-			b, err := info.GetXattr(entry.Path, attr)
+			value, err := info.GetXattr(entry.Path, attr)
 			if err != nil {
+				fmt.Printf("Error for path '%s' and attribute '%s'. Error msg: %s", entry.Path, attr, err)
 				continue
 			}
-
-			f, err := strconv.ParseFloat(string(b), 64)
+			f, err := strconv.ParseFloat(string(value), 64)
 			fmt.Println("path:", entry.Path, "attr:", attr, "value:", f)
 			if err != nil {
-				log.Printf("unable to convert %q to float: %v", b, err)
+				log.Printf("unable to convert %q to float: %v", value, err)
+				continue
 			}
-			fields[attr] = f
 			name := fmt.Sprintf("cephfs_xattr_%s", strings.ReplaceAll(attr, ".", "_"))
 			gauge := dm.AddGauge(name, "A dynamically generated metric")
 			gauge.With(entry.Tags()).Set(f)
