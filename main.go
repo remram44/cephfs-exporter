@@ -98,7 +98,7 @@ func (dm *DynamicMetrics) UpdateMetrics(info *cephfs.MountInfo) {
 			gauge.With(entry.Tags()).Set(f)
 		}
 	}
-}
+}	
 
 func main() {
 	var (
