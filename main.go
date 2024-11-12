@@ -17,6 +17,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const (
+	defaultCephClusterLabel = "ceph"
+	defaultCephConfigPath   = "/etc/ceph/ceph.conf"
+	defaultCephUser         = "admin"
+	defaultUpdateInterval   = 5 // in seconds
+)
+
 type PathEntry struct {
 	Organisation string `json:"Organisation"`
 	User         string `json:"User"`
@@ -95,15 +102,21 @@ func (dm *DynamicMetrics) UpdateMetrics(info *cephfs.MountInfo) {
 
 func main() {
 	var (
-		metricsAddr = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for ceph exporter's metrics endpoint")
-		metricsPath = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for surfacing metrics to Prometheus")
+		metricsAddr    = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for ceph exporter's metrics endpoint")
+		metricsPath    = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for surfacing metrics to Prometheus")
+		cephConfig     = envflag.String("CEPH_CONFIG", defaultCephConfigPath, "Path to Ceph config file")
+		cephUser       = envflag.String("CEPH_USER", defaultCephUser, "Ceph user to connect to cluster")
+		updateInterval = envflag.Int("UPDATE_INTERVAL", defaultUpdateInterval, "Interval to scrape updated ceph metrics (in seconds)")
 	)
 
 	envflag.Parse()
-
-	conn, err := rados.NewConn()
+	conn, err := rados.NewConnWithUser(*cephUser)
 	if err != nil {
-		log.Fatalf("failed to create connection: %v", err)
+		log.Fatalf("failed to create rados connection: %v", err)
+	}
+	err = conn.ReadConfigFile(*cephConfig)
+	if err != nil {
+		log.Fatalf("failed to read config file: %s", err)
 	}
 
 	err = conn.ReadDefaultConfigFile()
@@ -135,7 +148,7 @@ func main() {
 	go func() {
 		for {
 			dm.UpdateMetrics(info)
-			time.Sleep(5 * time.Second)
+			time.Sleep(time.Duration(*updateInterval) * time.Second)
 		}
 	}()
 
