@@ -12,6 +12,7 @@ import (
 
 	"github.com/ceph/go-ceph/cephfs"
 	rados "github.com/ceph/go-ceph/rados"
+	"github.com/ianschenck/envflag"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -93,6 +94,13 @@ func (dm *DynamicMetrics) UpdateMetrics(info *cephfs.MountInfo) {
 }
 
 func main() {
+	var (
+		metricsAddr = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for ceph exporter's metrics endpoint")
+		metricsPath = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for surfacing metrics to Prometheus")
+	)
+
+	envflag.Parse()
+
 	conn, err := rados.NewConn()
 	if err != nil {
 		log.Fatalf("failed to create connection: %v", err)
@@ -122,7 +130,7 @@ func main() {
 
 	dm := NewDynamicMetrics()
 
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle(*metricsPath, promhttp.Handler())
 
 	go func() {
 		for {
@@ -131,6 +139,6 @@ func main() {
 		}
 	}()
 
-	fmt.Println("Starting server on :2112")
-	log.Fatal(http.ListenAndServe(":2112", nil))
+	fmt.Printf("Starting server on %s\n", *metricsAddr)
+	log.Fatal(http.ListenAndServe(*metricsAddr, nil))
 }
