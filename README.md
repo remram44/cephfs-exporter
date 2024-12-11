@@ -8,3 +8,5 @@ Prometheus exporter that publishes size information to Prometheus, by reading xa
 - `CEPH_CONFIG` : Config to connect to ceph cluster (default: `/etc/ceph/ceph.conf`).
 - `TELEMETRY_PORT` : Port of the ceph exporter (default: `:9128`).
 - `TELEMETRY_PATH` : URL path for surfacing metrics to Prometheus (default: `/metrics`).
+- `RECURSE_MIN_SIZE` : Minimum size of a directory to be included recursively
+- `RECURSE_MAX_LEVELS` : Maximum levels to recurse

@@ -15,10 +15,8 @@ import (
 )
 
 const (
-	defaultCephConfigPath  = "/etc/ceph/ceph.conf"
-	defaultCephUser        = "admin"
-	directorySizeToRecurse = 100_000_000_000_000 // 100 TB
-	recurseMax             = 5
+	defaultCephConfigPath = "/etc/ceph/ceph.conf"
+	defaultCephUser       = "admin"
 )
 
 var (
@@ -36,7 +34,9 @@ var (
 
 type Collector struct {
 	prometheus.Collector
-	filesystem *cephfs.MountInfo
+	filesystem       *cephfs.MountInfo
+	recurseMinSize   uint64
+	recurseMaxLevels int
 }
 
 func (c Collector) Describe(ch chan<- *prometheus.Desc) {
@@ -50,14 +50,14 @@ func (c Collector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func getNumXattr(filesystem *cephfs.MountInfo, path string, attr string) (float64, error) {
+func getNumXattr(filesystem *cephfs.MountInfo, path string, attr string) (uint64, error) {
 	value, err := filesystem.GetXattr(path, attr)
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
-	num, err := strconv.ParseFloat(string(value), 64)
+	num, err := strconv.ParseUint(string(value), 10, 64)
 	if err != nil {
-		return -1, fmt.Errorf("Invalid number")
+		return 0, fmt.Errorf("Invalid number")
 	}
 	return num, nil
 }
@@ -70,7 +70,7 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 	}
 
 	// If we are recursing and this directory is small, stop
-	if optional && rbytes < directorySizeToRecurse || level > recurseMax {
+	if optional && rbytes < c.recurseMinSize || level > c.recurseMaxLevels {
 		return nil
 	}
 
@@ -84,18 +84,18 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 	ch <- prometheus.MustNewConstMetric(
 		rbytesDesc,
 		prometheus.GaugeValue,
-		rbytes,
+		float64(rbytes),
 		path,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		rentriesDesc,
 		prometheus.GaugeValue,
-		rentries,
+		float64(rentries),
 		path,
 	)
 
 	// Recurse
-	if rbytes >= directorySizeToRecurse {
+	if rbytes >= c.recurseMinSize {
 		dir, err := c.filesystem.OpenDir(path)
 		if err != nil {
 			return fmt.Errorf("Opening directory: %w", err)
@@ -130,10 +130,12 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 
 func main() {
 	var (
-		metricsAddr = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for metrics endpoint")
-		metricsPath = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for metrics endpoint")
-		cephConfig  = envflag.String("CEPH_CONFIG", defaultCephConfigPath, "Path to Ceph config file")
-		cephUser    = envflag.String("CEPH_USER", defaultCephUser, "Ceph user to connect to cluster")
+		metricsAddr      = envflag.String("TELEMETRY_ADDR", ":9128", "Host:Port for metrics endpoint")
+		metricsPath      = envflag.String("TELEMETRY_PATH", "/metrics", "URL path for metrics endpoint")
+		cephConfig       = envflag.String("CEPH_CONFIG", defaultCephConfigPath, "Path to Ceph config file")
+		cephUser         = envflag.String("CEPH_USER", defaultCephUser, "Ceph user to connect to cluster")
+		recurseMinSize   = envflag.Uint64("RECURSE_MIN_SIZE", 100_000_000_000, "Minimum size of directory to recurse")
+		recurseMaxLevels = envflag.Int("RECURSE_MAX_LEVELS", 5, "Maximum levels to recurse")
 	)
 
 	envflag.Parse()
@@ -169,7 +171,11 @@ func main() {
 	defer filesystem.Unmount()
 	log.Print("Successfully mounted Ceph filesystem!")
 
-	prometheus.MustRegister(Collector{filesystem: filesystem})
+	prometheus.MustRegister(Collector{
+		filesystem:       filesystem,
+		recurseMinSize:   *recurseMinSize, // 100 TB
+		recurseMaxLevels: *recurseMaxLevels,
+	})
 	http.Handle(*metricsPath, promhttp.Handler())
 
 	log.Printf("Starting server on %s\n", *metricsAddr)
