@@ -1,18 +1,10 @@
 # CephFS XAttr Prometheus Exporter
-Prometheus exporter that publishes xattributes as metrics.
 
-### Configuration
+Prometheus exporter that publishes size information to Prometheus, by reading xattributes.
 
-Create `paths.json` configuration with paths for which the attributes should be exported (see `example.paths.json`)
+## Environment Variables
 
-### Environment Variables
 - `CEPH_USER` : User to connect to ceph cluster (default: `admin`).
 - `CEPH_CONFIG` : Config to connect to ceph cluster (default: `/etc/ceph/ceph.conf`).
 - `TELEMETRY_PORT` : Port of the ceph exporter (default: `:9128`).
 - `TELEMETRY_PATH` : URL path for surfacing metrics to Prometheus (default: `/metrics`).
-
-
-### TODO
-- [ x ] Make custom `CEPH_USER`, `CEPH_CONFIG`
-- [ x ] Add option to choose `TELMETRY_PORT`, `TELEMETRY_PATH`
-- [ ] Recurse the directory if it is large enough
