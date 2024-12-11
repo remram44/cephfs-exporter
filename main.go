@@ -17,7 +17,8 @@ import (
 const (
 	defaultCephConfigPath  = "/etc/ceph/ceph.conf"
 	defaultCephUser        = "admin"
-	directorySizeToRecurse = 100_000_000_000 // 100 GB
+	directorySizeToRecurse = 100_000_000_000_000 // 100 TB
+	recurseMax             = 5
 )
 
 var (
@@ -43,7 +44,7 @@ func (c Collector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c Collector) Collect(ch chan<- prometheus.Metric) {
-	err := c.observePath("/", ch, false)
+	err := c.observePath("/", ch, false, 0)
 	if err != nil {
 		log.Print(err)
 	}
@@ -69,7 +70,7 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 	}
 
 	// If we are recursing and this directory is small, stop
-	if optional && rbytes < directorySizeToRecurse {
+	if optional && rbytes < directorySizeToRecurse || level > recurseMax {
 		return nil
 	}
 
@@ -115,6 +116,7 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 					filepath.Join(path, entryDir.Name()),
 					ch,
 					true, // optional, only observe if big enough
+					level+1,
 				)
 				if err != nil {
 					return err
