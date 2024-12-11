@@ -165,6 +165,14 @@ func main() {
 		log.Fatalf("Failed to create cephfs mountinfo: %v", err)
 	}
 
+	if err := filesystem.Init(); err != nil {
+		log.Fatalf("Failed to init filesystem: %v", err)
+	}
+
+	if err := filesystem.SetMountPerms(cephfs.NewUserPerm(0, 0, []int{0})); err != nil {
+		log.Fatalf("Failed to set mount permissions: %v", err)
+	}
+
 	if err := filesystem.Mount(); err != nil {
 		log.Fatalf("Failed to mount filesystem: %v", err)
 	}
@@ -173,7 +181,7 @@ func main() {
 
 	prometheus.MustRegister(Collector{
 		filesystem:       filesystem,
-		recurseMinSize:   *recurseMinSize, // 100 TB
+		recurseMinSize:   *recurseMinSize,
 		recurseMaxLevels: *recurseMaxLevels,
 	})
 	http.Handle(*metricsPath, promhttp.Handler())
