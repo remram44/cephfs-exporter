@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -42,7 +43,10 @@ func (c Collector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c Collector) Collect(ch chan<- prometheus.Metric) {
-	c.observePath("/", ch, false)
+	err := c.observePath("/", ch, false)
+	if err != nil {
+		log.Print(err)
+	}
 }
 
 func getNumXattr(filesystem *cephfs.MountInfo, path string, attr string) (float64, error) {
@@ -52,16 +56,16 @@ func getNumXattr(filesystem *cephfs.MountInfo, path string, attr string) (float6
 	}
 	num, err := strconv.ParseFloat(string(value), 64)
 	if err != nil {
-		return -1, err
+		return -1, fmt.Errorf("Invalid number")
 	}
 	return num, nil
 }
 
-func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optional bool) error {
+func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optional bool, level int) error {
 	// Read rbytes
 	rbytes, err := getNumXattr(c.filesystem, path, "ceph.dir.rbytes")
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting rbytes: %w", err)
 	}
 
 	// If we are recursing and this directory is small, stop
@@ -72,7 +76,7 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 	// Read entries
 	rentries, err := getNumXattr(c.filesystem, path, "ceph.dir.rentries")
 	if err != nil {
-		return err
+		return fmt.Errorf("Getting rentries: %w", err)
 	}
 
 	// Emit metrics
@@ -93,12 +97,12 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 	if rbytes >= directorySizeToRecurse {
 		dir, err := c.filesystem.OpenDir(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("Opening directory: %w", err)
 		}
 		for {
 			entryDir, err := dir.ReadDir()
 			if err != nil {
-				return err
+				return fmt.Errorf("Reading directory: %w", err)
 			}
 			if entryDir == nil {
 				break
@@ -161,6 +165,7 @@ func main() {
 		log.Fatalf("Failed to mount filesystem: %v", err)
 	}
 	defer filesystem.Unmount()
+	log.Print("Successfully mounted Ceph filesystem!")
 
 	prometheus.MustRegister(Collector{filesystem: filesystem})
 	http.Handle(*metricsPath, promhttp.Handler())
