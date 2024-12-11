@@ -110,7 +110,7 @@ func (c Collector) observePath(path string, ch chan<- prometheus.Metric, optiona
 			if entryDir.Name() == "." || entryDir.Name() == ".." {
 				continue
 			}
-			if entryDir.DType() == 4 {
+			if entryDir.DType() == cephfs.DTypeDir {
 				err := c.observePath(
 					filepath.Join(path, entryDir.Name()),
 					ch,
